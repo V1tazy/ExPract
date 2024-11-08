@@ -1,5 +1,6 @@
 ﻿using EaseManager2.Models;
 using System.Collections.ObjectModel;
+using System.Data.SqlClient;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
@@ -10,7 +11,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-using YourNamespace;
 
 namespace EaseManager2
 {
@@ -19,71 +19,78 @@ namespace EaseManager2
     /// </summary>
     public partial class MainWindow : Window
     {
-        private DatabaseService dbService;
-        private ObservableCollection<Partner> partners;
+        private const string ConnectionString = "Data Source=localhost;Initial Catalog=materials_sales_db;Integrated Security=True;";
 
         public MainWindow()
         {
             InitializeComponent();
-            dbService = new DatabaseService();
             LoadPartners();
         }
 
         private void LoadPartners()
         {
-            partners = dbService.GetPartners();
-            PartnersDataGrid.ItemsSource = partners;
+            var partners = new List<Partner>();
+
+            using (SqlConnection connection = new SqlConnection(ConnectionString))
+            {
+                connection.Open();
+                string query = "SELECT * FROM Partner";
+                using (SqlCommand command = new SqlCommand(query, connection))
+                {
+                    using (SqlDataReader reader = command.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            partners.Add(new Partner
+                            {
+                                Id = reader.GetInt32(0),
+                                PartnerType = reader.GetString(1),
+                                Name = reader.GetString(2),
+                                Director = reader.GetString(3),
+                                Email = reader.GetString(4),
+                                Phone = reader.GetString(5),
+                                Address = reader.GetString(6),
+                                Inn = reader.GetString(7),
+                                Rating = reader.GetInt32(8)
+                            });
+                        }
+                    }
+                }
+            }
+
+            PartnersItemsControl.ItemsSource = partners;
         }
 
-        private void btnAdd_Click(object sender, RoutedEventArgs e)
+        private void EditPartner_Click(object sender, RoutedEventArgs e)
         {
- 
-            PartnerWindow partnerWindow = new PartnerWindow();
-            if (partnerWindow.ShowDialog() == true)
+            if (sender is Button button && button.DataContext is Partner partner)
             {
-                Partner newPartner = partnerWindow.Partner;
-                dbService.AddPartner(newPartner);
+                // Вызовите форму для редактирования данных партнера и сохраните изменения
+                EditPartnerWindow editWindow = new EditPartnerWindow(partner, ConnectionString);
+                if (editWindow.ShowDialog() == true)
+                {
+                    LoadPartners();
+                }
+            }
+        }
+
+        private void DeletePartner_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button button && button.DataContext is Partner partner)
+            {
+                using (SqlConnection connection = new SqlConnection(ConnectionString))
+                {
+                    connection.Open();
+                    string query = "DELETE FROM Partner WHERE Id = @Id";
+                    using (SqlCommand command = new SqlCommand(query, connection))
+                    {
+                        command.Parameters.AddWithValue("@Id", partner.Id);
+                        command.ExecuteNonQuery();
+                    }
+                }
                 LoadPartners();
             }
         }
-
-        private void btnEdit_Click(object sender, RoutedEventArgs e)
-        {
-            if (PartnersDataGrid.SelectedItem is Partner selectedPartner)
-            {
-
-                PartnerWindow partnerWindow = new PartnerWindow(selectedPartner);
-                if (partnerWindow.ShowDialog() == true)
-                {
-                    Partner updatedPartner = partnerWindow.Partner;
-                    dbService.UpdatePartner(updatedPartner);
-                    LoadPartners();
-                }
-            }
-            else
-            {
-                MessageBox.Show("Пожалуйста, выберите партнёра для редактирования.", "Редактирование", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-
-        private void btnDelete_Click(object sender, RoutedEventArgs e)
-        {
-            if (PartnersDataGrid.SelectedItem is Partner selectedPartner)
-            {
-                var result = MessageBox.Show($"Вы уверены, что хотите удалить партнёра '{selectedPartner.Name}'?",
-                                             "Удаление",
-                                             MessageBoxButton.YesNo,
-                                             MessageBoxImage.Question);
-                if (result == MessageBoxResult.Yes)
-                {
-                    dbService.DeletePartner(selectedPartner.Id);
-                    LoadPartners();
-                }
-            }
-            else
-            {
-                MessageBox.Show("Пожалуйста, выберите партнёра для удаления.", "Удаление", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
     }
+
 }
